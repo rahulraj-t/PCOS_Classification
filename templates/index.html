@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCOS image screening</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PCOS image screening</h1>
+      <p>Upload an image and the model will classify it as affected or not affected. This is a screening aid, not a diagnosis.</p>
+    </header>
+
+    <form id="pcos-form" novalidate>
+      <label class="dropzone" id="dropzone" for="image">
+        <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/bmp,image/webp">
+        <img id="preview" alt="Preview of the selected image" hidden>
+        <span id="drop-text">
+          <strong>Choose an image</strong> or drop it here<br>
+          <small>PNG, JPG, BMP or WEBP, up to {{ max_mb }} MB</small>
+        </span>
+      </label>
+      <small class="error" id="error" role="alert"></small>
+
+      <button type="submit" id="submit-btn" disabled>Classify image</button>
+    </form>
+
+    <section id="result" class="result" hidden aria-live="polite"></section>
+
+    <footer>Results come from a machine-learning model and can be wrong. Please see a doctor for diagnosis and treatment.</footer>
+  </main>
+    <!-- Chatbot -->
+  <div id="chatbot-container">
+    <button id="chatbot-toggle">
+      💬
+    </button>
+
+    <div id="chatbot-window" class="hidden">
+      <div class="chatbot-header">
+        <h3>PCOS Assistant</h3>
+        <button id="chatbot-close">✕</button>
+      </div>
+
+      <div id="chatbot-messages">
+        <div class="bot-message">
+          Hello! I'm your PCOS assistant. Ask me anything about PCOS symptoms, lifestyle, screening, or treatment options.
+        </div>
+      </div>
+
+      <form id="chatbot-form">
+        <input
+          type="text"
+          id="chatbot-input"
+          placeholder="Type a message..."
+          autocomplete="off"
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
