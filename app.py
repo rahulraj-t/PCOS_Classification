@@ -1,18 +1,35 @@
+"""
+WomenSafe PCOS Image Classifier
+Flask + Keras
+
+Run:
+    python app.py
+
+Open:
+    http://127.0.0.1:5000
+
+Model:
+    model/WomenSafe_stage1_best(1).keras
+"""
+
 import os
 import numpy as np
 import tensorflow as tf
-
+import keras
+from chatbot import chat_bp
 from flask import Flask, jsonify, render_template, request
 from PIL import Image, UnidentifiedImageError
-from tensorflow import keras
-from tensorflow.keras import layers
+from keras import layers
 
 
-# =====================================================
+# =========================================================
 # Custom Layers
-# =====================================================
+# These must match the definitions used during training.
+# =========================================================
 
+@keras.saving.register_keras_serializable()
 class PatchEmbedding(layers.Layer):
+
     def __init__(
         self,
         patch_size=16,
@@ -54,6 +71,7 @@ class PatchEmbedding(layers.Layer):
         return config
 
 
+@keras.saving.register_keras_serializable()
 class PositionalEmbedding(layers.Layer):
 
     def __init__(
@@ -68,23 +86,19 @@ class PositionalEmbedding(layers.Layer):
         self.embed_dim = embed_dim
 
     def build(self, input_shape):
-
         self.position_embedding = self.add_weight(
             name="position_embedding",
-            shape=(
-                self.num_patches,
-                self.embed_dim
-            ),
+            shape=(self.num_patches, self.embed_dim),
             initializer="random_normal",
             trainable=True
         )
 
-    def call(self, inputs):
+        super().build(input_shape)
 
+    def call(self, inputs):
         return inputs + self.position_embedding
 
     def get_config(self):
-
         config = super().get_config()
 
         config.update({
@@ -95,6 +109,7 @@ class PositionalEmbedding(layers.Layer):
         return config
 
 
+@keras.saving.register_keras_serializable()
 class SEBlock(layers.Layer):
 
     def __init__(
@@ -107,7 +122,6 @@ class SEBlock(layers.Layer):
         self.reduction = reduction
 
     def build(self, input_shape):
-
         channels = int(input_shape[-1])
 
         self.gap = layers.GlobalAveragePooling2D()
@@ -122,24 +136,19 @@ class SEBlock(layers.Layer):
             activation="sigmoid"
         )
 
-        self.reshape = layers.Reshape(
-            (1, 1, channels)
-        )
+        self.reshape = layers.Reshape((1, 1, channels))
+
+        super().build(input_shape)
 
     def call(self, inputs):
-
         x = self.gap(inputs)
-
         x = self.fc1(x)
-
         x = self.fc2(x)
-
         x = self.reshape(x)
 
         return inputs * x
 
     def get_config(self):
-
         config = super().get_config()
 
         config.update({
@@ -148,6 +157,8 @@ class SEBlock(layers.Layer):
 
         return config
 
+
+@keras.saving.register_keras_serializable()
 class TransformerBlock(layers.Layer):
 
     def __init__(
@@ -181,7 +192,7 @@ class TransformerBlock(layers.Layer):
             epsilon=1e-6
         )
 
-        self.ffn = tf.keras.Sequential([
+        self.ffn = keras.Sequential([
             layers.Dense(
                 ff_dim,
                 activation=tf.keras.activations.gelu
@@ -193,7 +204,6 @@ class TransformerBlock(layers.Layer):
         self.dropout2 = layers.Dropout(dropout)
 
     def call(self, inputs, training=None):
-
         x = self.norm1(inputs)
 
         attention_output = self.attention(
@@ -222,7 +232,6 @@ class TransformerBlock(layers.Layer):
         return x
 
     def get_config(self):
-
         config = super().get_config()
 
         config.update({
@@ -235,16 +244,21 @@ class TransformerBlock(layers.Layer):
         return config
 
 
-# =====================================================
-# App Settings
-# =====================================================
+# =========================================================
+# Application Settings
+# =========================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MODEL_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
+    BASE_DIR,
     "model",
     "WomenSafe_stage1_best(1).keras"
 )
 
+# Training labels previously used:
+# 0 = infected / PCOS affected
+# 1 = noninfected / PCOS not affected
 AFFECTED_CLASS = 0
 
 THRESHOLD = 0.7
@@ -253,7 +267,7 @@ DEFAULT_SIZE = (224, 224, 3)
 
 MAX_UPLOAD_MB = 10
 
-ALLOWED = {
+ALLOWED_EXTENSIONS = {
     "png",
     "jpg",
     "jpeg",
@@ -261,31 +275,50 @@ ALLOWED = {
     "webp"
 }
 
-# =====================================================
-# Flask App
-# =====================================================
+
+# =========================================================
+# Flask Application
+# =========================================================
 
 app = Flask(__name__)
 
 app.config["MAX_CONTENT_LENGTH"] = (
     MAX_UPLOAD_MB * 1024 * 1024
 )
+app.register_blueprint(chat_bp)
+
+# =========================================================
+# Load Trained Model
+# =========================================================
 
 print("Loading WomenSafe model...")
+
+if not os.path.isfile(MODEL_PATH):
+    raise FileNotFoundError(
+        f"Model file not found: {MODEL_PATH}"
+    )
 
 model = keras.models.load_model(
     MODEL_PATH,
     custom_objects={
+        "PatchEmbedding": PatchEmbedding,
+        "PositionalEmbedding": PositionalEmbedding,
         "SEBlock": SEBlock,
-        "TransformerBlock": TransformerBlock,
-        "PositionalEmbedding": PositionalEmbedding
+        "TransformerBlock": TransformerBlock
     },
     compile=False,
-    safe_mode=False
+    safe_mode=True
 )
 
+print("WomenSafe model loaded successfully!")
 
-print("Model loaded successfully!")
+print("Model input shape:", model.input_shape)
+print("Model output shape:", model.output_shape)
+
+
+# =========================================================
+# Read Model Input Shape
+# =========================================================
 
 shape = model.input_shape
 
@@ -300,26 +333,34 @@ except (TypeError, ValueError):
     HEIGHT, WIDTH, CHANNELS = DEFAULT_SIZE
 
 
+# =========================================================
+# Image Preprocessing
+# =========================================================
+
 def preprocess(file_storage):
+    """Read, resize and normalize an uploaded image."""
 
-    img = Image.open(file_storage.stream)
+    with Image.open(file_storage.stream) as image:
+        image = image.convert(
+            "L" if CHANNELS == 1 else "RGB"
+        )
 
-    img = img.convert(
-        "L" if CHANNELS == 1 else "RGB"
-    ).resize(
-        (WIDTH, HEIGHT)
-    )
+        image = image.resize((WIDTH, HEIGHT))
 
-    arr = np.asarray(
-        img,
-        dtype="float32"
-    ) / RESCALE
+        arr = np.asarray(
+            image,
+            dtype=np.float32
+        ) / RESCALE
 
     if CHANNELS == 1:
-        arr = arr[..., None]
+        arr = arr[..., np.newaxis]
 
-    return arr[None, ...]
+    return np.expand_dims(arr, axis=0)
 
+
+# =========================================================
+# Routes
+# =========================================================
 
 @app.route("/")
 def index():
@@ -334,76 +375,119 @@ def predict():
 
     file = request.files.get("image")
 
-    if file is None or file.filename == "":
+    # Check upload
+    if file is None or not file.filename:
         return jsonify({
             "ok": False,
-            "message": "Choose an image."
+            "message": "Choose an image to upload."
         }), 400
 
-    if (
+    # Check extension
+    extension = (
         file.filename.rsplit(".", 1)[-1].lower()
-        not in ALLOWED
-    ):
+        if "." in file.filename
+        else ""
+    )
+
+    if extension not in ALLOWED_EXTENSIONS:
         return jsonify({
             "ok": False,
-            "message": "Unsupported image format."
+            "message": (
+                "Use a PNG, JPG, JPEG, BMP or WEBP image."
+            )
         }), 400
 
+    # Preprocess image
     try:
         X = preprocess(file)
 
     except (
         UnidentifiedImageError,
-        OSError
+        OSError,
+        ValueError
     ):
         return jsonify({
             "ok": False,
-            "message": "Invalid image."
+            "message": "That file isn't a readable image."
         }), 400
 
+    # Run prediction
     try:
-        out = np.asarray(
-            model.predict(
-                X,
-                verbose=0
-            )
+        output = np.asarray(
+            model.predict(X, verbose=0)
         )
 
-    except Exception as exc:
+        if output.ndim == 2 and output.shape[1] > 1:
+            # Multiclass / softmax output
+            if not 0 <= AFFECTED_CLASS < output.shape[1]:
+                raise ValueError(
+                    "AFFECTED_CLASS does not match model outputs."
+                )
+
+            probability = float(
+                output[0, AFFECTED_CLASS]
+            )
+
+        else:
+            # Single-output sigmoid model
+            p1 = float(output.reshape(-1)[0])
+
+            probability = (
+                p1 if AFFECTED_CLASS == 1
+                else 1.0 - p1
+            )
+
+        if not np.isfinite(probability):
+            raise ValueError(
+                "The model returned an invalid probability."
+            )
+
+        if not 0.0 <= probability <= 1.0:
+            raise ValueError(
+                "The model output is outside the probability range."
+            )
+
+    except Exception:
+        app.logger.exception("Prediction failed")
+
         return jsonify({
             "ok": False,
-            "message": str(exc)
+            "message": (
+                "Prediction failed. Check the server logs."
+            )
         }), 500
 
-    p_affected = float(
-        out[0][AFFECTED_CLASS]
-    )
+    affected = probability >= THRESHOLD
 
     return jsonify({
         "ok": True,
-        "affected": p_affected >= THRESHOLD,
-        "probability": round(
-            p_affected,
-            4
-        )
+        "affected": affected,
+        "probability": round(probability, 4)
     })
 
 
+# =========================================================
+# Error Handlers
+# =========================================================
+
 @app.errorhandler(413)
 def too_large(_):
-
     return jsonify({
         "ok": False,
         "message": (
-            f"Image exceeds "
-            f"{MAX_UPLOAD_MB} MB."
+            f"Image is larger than {MAX_UPLOAD_MB} MB."
         )
     }), 413
 
 
+# =========================================================
+# Run Application
+# =========================================================
+
 if __name__ == "__main__":
     app.run(
-        debug=True,
-        host="0.0.0.0",
-        port=5000
+        host="127.0.0.1",
+        port=5000,
+        debug=False
     )
+

@@ -1,0 +1,17 @@
+```gitignore
+# Secrets
+.env
+womensafe_env/
+__pycache__/
+
+# Python environment and cache
+womensafe_env/
+__pycache__/
+*.py[cod]
+
+# Model backups
+model/WomenSafe_backup.keras
+
+# Test artifacts
+.pytest_cache/
+```

@@ -3,66 +3,186 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PCOS image screening</title>
+  <title>WomenSafe | PCOS image screening</title>
+  <meta name="description" content="AI-assisted PCOS screening from an image, with clear next steps and a PCOS information assistant.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
 </head>
 <body>
-  <main>
-    <header>
-      <h1>PCOS image screening</h1>
-      <p>Upload an image and the model will classify it as affected or not affected. This is a screening aid, not a diagnosis.</p>
-    </header>
+  <a class="skip" href="#screening">Skip to screening</a>
 
-    <form id="pcos-form" novalidate>
-      <label class="dropzone" id="dropzone" for="image">
-        <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/bmp,image/webp">
-        <img id="preview" alt="Preview of the selected image" hidden>
-        <span id="drop-text">
-          <strong>Choose an image</strong> or drop it here<br>
-          <small>PNG, JPG, BMP or WEBP, up to {{ max_mb }} MB</small>
-        </span>
-      </label>
-      <small class="error" id="error" role="alert"></small>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="WomenSafe home">
+        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="15" fill="var(--accent)"/>
+          <path d="M16 8c-3.3 0-6 2.7-6 6 0 4.5 6 10 6 10s6-5.500 6-10c0-3.300-2.700-6-6-6z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="16" cy="14" r="2" fill="#fff"/>
+        </svg>
+        <span>WomenSafe</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#screening">Screening</a>
+        <a href="#how">How it works</a>
+        <a href="#about">About PCOS</a>
+      </nav>
+    </div>
+  </header>
 
-      <button type="submit" id="submit-btn" disabled>Classify image</button>
-    </form>
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-inner">
+        <p class="eyebrow">AI-assisted screening</p>
+        <h1>Early insight into PCOS, from a single image.</h1>
+        <p class="lead">Upload an image and our trained model estimates whether it shows signs of polycystic ovary syndrome. Results arrive in seconds and come with clear next steps.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#screening">Start screening</a>
+          <a class="btn btn-ghost" href="#how">How it works</a>
+        </div>
+        <ul class="stats" aria-label="Key facts">
+          <li><strong>1 in 10</strong><span>women of reproductive age are affected by PCOS</span></li>
+          <li><strong>~70%</strong><span>of cases are estimated to go undiagnosed</span></li>
+          <li><strong>&lt; 5 sec</strong><span>typical time to get a screening result</span></li>
+        </ul>
+      </div>
+    </section>
 
-    <section id="result" class="result" hidden aria-live="polite"></section>
+    <section class="section" id="screening">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>PCOS screening</h2>
+          <p>Upload a clear image, review the preview, then run the analysis.</p>
+        </div>
 
-    <footer>Results come from a machine-learning model and can be wrong. Please see a doctor for diagnosis and treatment.</footer>
+        <div class="panels">
+          <div class="card">
+            <h3 class="card-title"><span class="step">1</span> Upload image</h3>
+            <form id="pcos-form" novalidate>
+              <label class="dropzone" id="dropzone" for="image">
+                <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/bmp,image/webp">
+                <img id="preview" alt="Preview of the selected image" hidden>
+                <span id="drop-text">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                  <strong>Choose an image</strong> or drag it here<br>
+                  <small>PNG, JPG, BMP or WEBP, up to {{ max_mb }} MB</small>
+                </span>
+              </label>
+              <p class="error" id="error" role="alert"></p>
+              <div class="row">
+                <button type="submit" id="submit-btn" class="btn btn-primary" disabled>Analyse image</button>
+                <button type="button" id="reset-btn" class="btn btn-ghost" hidden>Clear</button>
+              </div>
+            </form>
+            <p class="privacy">Images are analysed on this server and are not stored.</p>
+          </div>
+
+          <div class="card result-card">
+            <h3 class="card-title"><span class="step">2</span> Result</h3>
+            <div id="result-empty" class="empty">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+              <p>Your result will appear here after analysis.</p>
+            </div>
+            <div id="result-loading" class="empty" hidden>
+              <div class="spinner" aria-hidden="true"></div>
+              <p>Analysing image…</p>
+            </div>
+            <section id="result" class="result" hidden aria-live="polite"></section>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="how">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>How it works</h2>
+          <p>Three simple steps from image to insight.</p>
+        </div>
+        <ol class="steps">
+          <li><span class="num">1</span><h3>Upload</h3><p>Select or drop an image. It is validated for type and size before analysis.</p></li>
+          <li>
+              <span class="num">2</span>
+              <h3>Analyse</h3>
+              <p>
+                  A hybrid deep-learning model fuses MobileNetV2 CNN features
+                  with Multi-Head Vision Transformer features, enhanced by
+                  Squeeze-and-Excitation (SE) attention, to classify PCOS
+                  ultrasound images.
+              </p>
+          </li>
+          <li><span class="num">3</span><h3>Review</h3><p>You see the classification, a confidence score and recommended next steps.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="about">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>About PCOS</h2>
+          <p>Polycystic ovary syndrome is a common hormonal condition that is manageable with the right care.</p>
+        </div>
+        <div class="grid3">
+          <article class="card"><h3>Common signs</h3><p>Irregular or missed periods, excess facial or body hair, acne, thinning scalp hair, weight gain and darkened skin patches.</p></article>
+          <article class="card"><h3>How it is diagnosed</h3><p>Doctors usually combine symptoms, blood tests for hormones and an ovarian ultrasound. No single test is enough on its own.</p></article>
+          <article class="card"><h3>Managing it</h3><p>Balanced nutrition, regular activity and stress care help, and medication can regulate cycles and symptoms when needed.</p></article>
+        </div>
+      </div>
+    </section>
+
+
+
+    <section class="wrap">
+      <div class="notice" role="note">
+        <strong>Medical disclaimer.</strong> WomenSafe provides general information and an automated screening estimate. It does not replace professional medical advice, diagnosis or treatment. If you have symptoms or concerns, please consult a doctor.
+      </div>
+    </section>
   </main>
-    <!-- Chatbot -->
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>&copy; <span id="year"></span> WomenSafe</span>
+      <span>For screening support only. Not a medical device.</span>
+    </div>
+  </footer>
+
+  <!-- Chatbot -->
   <div id="chatbot-container">
-    <button id="chatbot-toggle">
-      💬
+    <button id="chatbot-toggle" type="button" aria-label="Open PCOS assistant" aria-expanded="false" aria-controls="chatbot-window">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.600 7.100L4 20l1-4.500A8 8 0 1 1 21 12z"/></svg>
     </button>
 
-    <div id="chatbot-window" class="hidden">
+    <div id="chatbot-window" class="hidden" role="dialog" aria-label="PCOS assistant">
       <div class="chatbot-header">
-        <h3>PCOS Assistant</h3>
-        <button id="chatbot-close">✕</button>
+        <div>
+          <h3>PCOS Assistant</h3>
+          <small>General information only</small>
+        </div>
+        <button id="chatbot-close" type="button" aria-label="Close chat">&#10005;</button>
       </div>
 
-      <div id="chatbot-messages">
-        <div class="bot-message">
-          Hello! I'm your PCOS assistant. Ask me anything about PCOS symptoms, lifestyle, screening, or treatment options.
-        </div>
+      <div id="chatbot-messages" aria-live="polite">
+        <div class="bot-message">Hello! I'm your PCOS assistant. Ask me about symptoms, lifestyle, screening or treatment options.</div>
+      </div>
+
+      <div class="chips" id="chips">
+        <button type="button" data-q="What are the symptoms of PCOS?">Symptoms</button>
+        <button type="button" data-q="How is PCOS diagnosed?">Diagnosis</button>
+        <button type="button" data-q="What diet helps with PCOS?">Diet</button>
+        <button type="button" data-q="How is PCOS treated?">Treatment</button>
       </div>
 
       <form id="chatbot-form">
-        <input
-          type="text"
-          id="chatbot-input"
-          placeholder="Type a message..."
-          autocomplete="off"
-        />
+        <input type="text" id="chatbot-input" placeholder="Type a message..." autocomplete="off" aria-label="Message">
         <button type="submit">Send</button>
       </form>
     </div>
   </div>
+
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
